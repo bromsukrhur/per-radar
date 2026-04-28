@@ -1,0 +1,1628 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PER 레이더 — 저평가 성장주 대시보드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0e17;
+    --bg2: #111827;
+    --bg3: #1a2235;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e8edf5;
+    --text2: #8b96aa;
+    --text3: #4d5a6e;
+    --accent: #3b82f6;
+    --accent2: #60a5fa;
+    --green: #10b981;
+    --green2: #34d399;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --purple: #8b5cf6;
+    --teal: #14b8a6;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Noto Sans KR', sans-serif;
+    --sidebar-w: 240px;
+    --header-h: 56px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; overflow-x: hidden; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* ── Layout ── */
+  .app { display: flex; height: 100vh; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: var(--sidebar-w);
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    z-index: 100;
+    transition: transform 0.25s ease;
+  }
+  .sidebar-logo {
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-icon {
+    width: 30px; height: 30px;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 700; color: #fff;
+    font-family: var(--mono);
+    flex-shrink: 0;
+  }
+  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+  .logo-sub { font-size: 10px; color: var(--text3); margin-top: 1px; letter-spacing: 0.5px; text-transform: uppercase; }
+
+  .sidebar-nav { flex: 1; padding: 12px 10px; overflow-y: auto; }
+  .nav-section { margin-bottom: 18px; }
+  .nav-label { font-size: 10px; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; padding: 0 10px 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 8px;
+    color: var(--text2); cursor: pointer;
+    transition: all 0.15s; font-size: 13px;
+    margin-bottom: 2px;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+  .nav-item.active { background: rgba(59,130,246,0.15); color: var(--accent2); }
+  .nav-item .nav-icon { width: 18px; text-align: center; font-size: 14px; opacity: 0.8; }
+  .nav-badge { margin-left: auto; font-size: 10px; background: var(--accent); color: #fff; padding: 1px 6px; border-radius: 10px; font-family: var(--mono); }
+
+  .sidebar-footer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text3);
+  }
+  .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; }
+  .status-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+  .status-dot.demo { background: var(--amber); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  /* ── Main ── */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── Header ── */
+  .header {
+    height: var(--header-h);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 20px; gap: 12px;
+    flex-shrink: 0;
+    background: var(--bg);
+  }
+  .hamburger { display: none; background: none; border: none; color: var(--text2); font-size: 18px; cursor: pointer; padding: 4px; }
+  .header-title { font-size: 15px; font-weight: 500; }
+  .header-spacer { flex: 1; }
+  .interval-tabs { display: flex; gap: 3px; background: var(--bg3); padding: 3px; border-radius: 8px; }
+  .interval-tab {
+    padding: 4px 10px; border-radius: 6px; font-size: 12px;
+    color: var(--text2); cursor: pointer; transition: all 0.15s;
+    font-family: var(--mono); border: none; background: none;
+  }
+  .interval-tab.active { background: var(--accent); color: #fff; }
+  .api-btn {
+    padding: 6px 14px; border-radius: 8px;
+    background: rgba(59,130,246,0.15); color: var(--accent2);
+    border: 1px solid rgba(59,130,246,0.3); font-size: 12px;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .api-btn:hover { background: rgba(59,130,246,0.25); }
+  .refresh-btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--bg3); border: 1px solid var(--border2);
+    color: var(--text2); cursor: pointer; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .refresh-btn:hover { color: var(--text); background: var(--bg2); }
+  .refresh-btn.spinning { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Content ── */
+  .content { flex: 1; overflow-y: auto; padding: 20px; }
+
+  /* ── Market Overview ── */
+  .market-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .market-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 16px;
+    transition: border-color 0.2s;
+  }
+  .market-card:hover { border-color: var(--border2); }
+  .mc-label { font-size: 11px; color: var(--text3); letter-spacing: 0.04em; margin-bottom: 6px; }
+  .mc-value { font-size: 20px; font-weight: 700; font-family: var(--mono); letter-spacing: -0.5px; }
+  .mc-sub { font-size: 11px; margin-top: 4px; font-family: var(--mono); }
+  .up { color: var(--green2); }
+  .down { color: #f87171; }
+  .neutral { color: var(--text2); }
+  .mc-bar { height: 3px; border-radius: 2px; margin-top: 10px; background: var(--bg3); overflow: hidden; }
+  .mc-bar-fill { height: 100%; border-radius: 2px; transition: width 0.8s ease; }
+
+  /* ── Sections ── */
+  .section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .section-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+  .section-grid.full { grid-template-columns: 1fr; }
+  .panel {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 14px; overflow: hidden;
+  }
+  .panel-header {
+    padding: 14px 18px 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title { font-size: 13px; font-weight: 500; }
+  .panel-sub { font-size: 11px; color: var(--text3); margin-left: auto; }
+  .panel-body { padding: 14px 18px; }
+
+  /* ── Sector Cards ── */
+  .sector-list { display: flex; flex-direction: column; gap: 8px; }
+  .sector-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: 10px;
+    background: var(--bg3); cursor: pointer;
+    transition: all 0.15s; border: 1px solid transparent;
+  }
+  .sector-item:hover { border-color: var(--border2); }
+  .sector-item.selected { border-color: var(--accent); background: rgba(59,130,246,0.08); }
+  .sector-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .sector-name { font-size: 13px; flex: 1; }
+  .sector-per { font-family: var(--mono); font-size: 13px; color: var(--text2); }
+  .sector-growth { font-family: var(--mono); font-size: 12px; }
+  .sector-bar-wrap { width: 60px; }
+  .sector-bar-bg { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.07); }
+  .sector-bar-inner { height: 100%; border-radius: 2px; transition: width 1s ease; }
+
+  /* ── Stock Table ── */
+  .stock-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .stock-table th {
+    text-align: left; padding: 8px 10px;
+    color: var(--text3); font-weight: 400; font-size: 11px;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+    cursor: pointer; user-select: none;
+  }
+  .stock-table th:hover { color: var(--text2); }
+  .stock-table td { padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+  .stock-table tr:last-child td { border-bottom: none; }
+  .stock-table tr:hover td { background: rgba(255,255,255,0.025); }
+  .stock-name { font-weight: 500; font-size: 13px; }
+  .stock-code { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-top: 1px; }
+  .per-badge {
+    display: inline-block; padding: 2px 7px; border-radius: 5px;
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+  }
+  .per-low { background: rgba(16,185,129,0.15); color: var(--green2); }
+  .per-mid { background: rgba(245,158,11,0.12); color: #fbbf24; }
+  .per-high { background: rgba(239,68,68,0.12); color: #fca5a5; }
+  .score-bar { display: flex; align-items: center; gap: 6px; }
+  .score-dots { display: flex; gap: 2px; }
+  .score-dot { width: 5px; height: 5px; border-radius: 50%; }
+  .alert-btn {
+    padding: 3px 8px; border-radius: 5px; font-size: 10px;
+    background: transparent; border: 1px solid var(--border2);
+    color: var(--text3); cursor: pointer; transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .alert-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .alert-btn.on { background: rgba(245,158,11,0.12); border-color: var(--amber); color: var(--amber); }
+
+  /* ── Chart ── */
+  .chart-wrap { position: relative; height: 200px; }
+
+  /* ── Alert Panel ── */
+  .alert-list { display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow-y: auto; }
+  .alert-item {
+    display: flex; gap: 10px; padding: 10px 12px;
+    background: var(--bg3); border-radius: 10px;
+    border-left: 3px solid transparent;
+  }
+  .alert-item.triggered { border-left-color: var(--amber); }
+  .alert-item.new { border-left-color: var(--green); animation: fadeIn 0.4s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+  .alert-icon { font-size: 14px; margin-top: 1px; }
+  .alert-text { font-size: 12px; line-height: 1.5; }
+  .alert-time { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-top: 2px; }
+  .alert-empty { text-align: center; color: var(--text3); font-size: 12px; padding: 24px; }
+
+  /* ── Ticker Bar ── */
+  .ticker-bar {
+    height: 32px; background: var(--bg3);
+    border-top: 1px solid var(--border);
+    overflow: hidden; position: relative;
+    flex-shrink: 0;
+  }
+  .ticker-track {
+    display: flex; gap: 40px; align-items: center;
+    height: 100%; white-space: nowrap;
+    animation: ticker 30s linear infinite;
+    padding: 0 20px;
+  }
+  @keyframes ticker { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+  .ticker-item { font-family: var(--mono); font-size: 11px; display: flex; gap: 8px; }
+  .ticker-name { color: var(--text2); }
+  .ticker-price { color: var(--text); }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px); z-index: 1000;
+    display: none; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--bg2); border: 1px solid var(--border2);
+    border-radius: 16px; width: 100%; max-width: 520px;
+    padding: 24px; max-height: 80vh; overflow-y: auto;
+  }
+  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+  .modal-close { background: none; border: none; color: var(--text2); font-size: 18px; cursor: pointer; }
+  .form-group { margin-bottom: 14px; }
+  .form-label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block; }
+  .form-input {
+    width: 100%; padding: 9px 12px; border-radius: 8px;
+    background: var(--bg3); border: 1px solid var(--border2);
+    color: var(--text); font-size: 13px; font-family: var(--mono);
+    outline: none; transition: border-color 0.15s;
+  }
+  .form-input:focus { border-color: var(--accent); }
+  .form-hint { font-size: 11px; color: var(--text3); margin-top: 4px; line-height: 1.5; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn-primary {
+    width: 100%; padding: 10px; border-radius: 9px;
+    background: var(--accent); color: #fff; font-size: 14px;
+    font-weight: 500; border: none; cursor: pointer; margin-top: 6px;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-secondary {
+    width: 100%; padding: 10px; border-radius: 9px;
+    background: var(--bg3); color: var(--text2); font-size: 14px;
+    border: 1px solid var(--border2); cursor: pointer; margin-top: 8px;
+    transition: all 0.15s;
+  }
+  .btn-secondary:hover { color: var(--text); }
+  .step-list { counter-reset: step; }
+  .step-item {
+    counter-increment: step;
+    padding: 10px 12px 10px 38px;
+    position: relative; font-size: 12px;
+    line-height: 1.6; color: var(--text2);
+    border-bottom: 1px solid var(--border);
+  }
+  .step-item:last-child { border-bottom: none; }
+  .step-item::before {
+    content: counter(step);
+    position: absolute; left: 10px; top: 10px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-size: 10px; display: flex; align-items: center;
+    justify-content: center; font-weight: 700;
+  }
+  .step-item a { color: var(--accent2); text-decoration: none; }
+  .step-item a:hover { text-decoration: underline; }
+
+  /* ── Toast ── */
+  .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
+  .toast {
+    background: var(--bg2); border: 1px solid var(--border2);
+    border-radius: 10px; padding: 10px 14px;
+    font-size: 12px; min-width: 220px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    animation: slideUp 0.3s ease;
+    display: flex; gap: 8px; align-items: flex-start;
+  }
+  @keyframes slideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+  .toast.success { border-left: 3px solid var(--green); }
+  .toast.warning { border-left: 3px solid var(--amber); }
+  .toast.info { border-left: 3px solid var(--accent); }
+
+  /* ── Filter Bar ── */
+  .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+  .filter-chip {
+    padding: 5px 12px; border-radius: 20px; font-size: 12px;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text2); cursor: pointer; transition: all 0.15s;
+  }
+  .filter-chip.active { background: rgba(59,130,246,0.15); border-color: var(--accent); color: var(--accent2); }
+  .filter-chip:hover { border-color: var(--border2); color: var(--text); }
+  .search-input {
+    padding: 5px 12px; border-radius: 20px; font-size: 12px;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); outline: none; width: 160px;
+    transition: border-color 0.15s;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--text3); }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .sidebar { position: fixed; top: 0; left: 0; height: 100%; transform: translateX(-100%); }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-overlay { display: block !important; }
+    .hamburger { display: flex; }
+    .section-grid { grid-template-columns: 1fr; }
+    .section-grid.three { grid-template-columns: 1fr; }
+    .market-row { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .content { padding: 12px; }
+    .market-row { grid-template-columns: repeat(2, 1fr); }
+    .interval-tabs { display: none; }
+    .api-btn span { display: none; }
+  }
+
+  .sidebar-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5); z-index: 99;
+  }
+  .loading-skeleton {
+    background: linear-gradient(90deg, var(--bg3) 25%, rgba(255,255,255,0.04) 50%, var(--bg3) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 6px;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+</style>
+</head>
+<body>
+
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+<!-- Sidebar -->
+<div class="app">
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">P</div>
+    <div>
+      <div class="logo-text">PER 레이더</div>
+      <div class="logo-sub">저평가 성장주 탐색</div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section">
+      <div class="nav-label">대시보드</div>
+      <div class="nav-item active" onclick="setPage('overview')">
+        <span class="nav-icon">📊</span> 시장 개요
+      </div>
+      <div class="nav-item" onclick="setPage('screener')">
+        <span class="nav-icon">🔍</span> 종목 스크리너
+        <span class="nav-badge" id="screenerCount">24</span>
+      </div>
+      <div class="nav-item" onclick="setPage('sectors')">
+        <span class="nav-icon">🏭</span> 업종 분석
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">알림</div>
+      <div class="nav-item" onclick="setPage('alerts')">
+        <span class="nav-icon">🔔</span> 알림 설정
+        <span class="nav-badge" id="alertCount">0</span>
+      </div>
+      <div class="nav-item" onclick="setPage('watchlist')">
+        <span class="nav-icon">⭐</span> 관심 종목
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">AI 분석</div>
+      <div class="nav-item" onclick="setPage('ai_analysis')">
+        <span class="nav-icon">🤖</span> AI 성장주 분석
+        <span class="nav-badge" style="background:var(--purple)">NEW</span>
+      </div>
+      <div class="nav-item" onclick="setPage('ai_cost')">
+        <span class="nav-icon">💰</span> 비용 계산기
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">설정</div>
+      <div class="nav-item" onclick="openApiModal()">
+        <span class="nav-icon">🔑</span> KIS API 설정
+      </div>
+      <div class="nav-item" onclick="openAiApiModal()">
+        <span class="nav-icon">🧠</span> AI API 설정
+      </div>
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">데모 모드</span>
+    <div style="margin-top:4px;font-size:10px;color:var(--text3)">
+      마지막 갱신: <span id="lastUpdate" style="font-family:var(--mono)">—</span>
+    </div>
+    <div style="margin-top:4px;font-size:10px;color:var(--text3)">
+      AI 잔액: <span id="aiBalanceDisplay" style="font-family:var(--mono);color:var(--green)">—</span>
+    </div>
+  </div>
+</aside>
+
+<!-- Main -->
+<div class="main">
+  <header class="header">
+    <button class="hamburger" onclick="toggleSidebar()">☰</button>
+    <div class="header-title" id="pageTitle">시장 개요</div>
+    <div class="header-spacer"></div>
+    <div class="interval-tabs">
+      <button class="interval-tab" onclick="setInterval_('1m')">1분</button>
+      <button class="interval-tab active" onclick="setInterval_('5m')">5분</button>
+      <button class="interval-tab" onclick="setInterval_('1h')">1시간</button>
+      <button class="interval-tab" onclick="setInterval_('1d')">일봉</button>
+    </div>
+    <button class="api-btn" onclick="openApiModal()">🔑 <span>API 연결</span></button>
+    <button class="refresh-btn" id="refreshBtn" onclick="refreshData()" title="새로고침">↻</button>
+  </header>
+
+  <div class="content" id="content">
+    <!-- Dynamic content here -->
+  </div>
+
+  <!-- Ticker Bar -->
+  <div class="ticker-bar">
+    <div class="ticker-track" id="tickerTrack"></div>
+  </div>
+</div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- API Setup Modal -->
+<div class="modal-overlay" id="apiModal">
+  <div class="modal">
+    <div class="modal-title">
+      🔑 한국투자증권 API 설정
+      <button class="modal-close" onclick="closeApiModal()">✕</button>
+    </div>
+    <div style="background:var(--bg3);border-radius:10px;margin-bottom:16px;">
+      <div class="step-list">
+        <div class="step-item">
+          <a href="https://apiportal.koreainvestment.com" target="_blank">apiportal.koreainvestment.com</a> 접속 후 회원가입
+        </div>
+        <div class="step-item">
+          앱 등록 → <strong style="color:var(--text)">앱 키(App Key)</strong>와 <strong style="color:var(--text)">앱 시크릿(App Secret)</strong> 발급
+        </div>
+        <div class="step-item">
+          모의투자(Paper) 또는 실계좌 선택 후 아래에 입력
+        </div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">App Key</label>
+      <input class="form-input" id="inputAppKey" placeholder="발급받은 App Key 입력" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label">App Secret</label>
+      <input class="form-input" id="inputAppSecret" type="password" placeholder="발급받은 App Secret 입력" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">환경</label>
+        <select class="form-input" id="inputEnv">
+          <option value="paper">모의투자 (Paper)</option>
+          <option value="real">실계좌 (Real)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">갱신 주기</label>
+        <select class="form-input" id="inputRefreshInterval">
+          <option value="60">1분</option>
+          <option value="300" selected>5분</option>
+          <option value="3600">1시간</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-hint" style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:10px 12px;margin-bottom:4px;">
+      ⚠️ API 키는 브라우저 localStorage에만 저장됩니다. 서버로 전송되지 않습니다.<br>
+      CORS 우회가 필요한 경우 로컬 프록시 서버(proxy.js)를 사용하세요.
+    </div>
+    <button class="btn-primary" onclick="saveApiConfig()">✓ 저장 및 연결 테스트</button>
+    <button class="btn-secondary" onclick="useDemoMode()">데모 모드로 계속 사용</button>
+  </div>
+</div>
+
+<!-- Alert Setup Modal -->
+<div class="modal-overlay" id="alertModal">
+  <div class="modal">
+    <div class="modal-title">
+      🔔 알림 설정
+      <button class="modal-close" onclick="document.getElementById('alertModal').classList.remove('open')">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">종목명 또는 코드</label>
+      <input class="form-input" id="alertStock" placeholder="예: 삼성전자 또는 005930">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">알림 조건</label>
+        <select class="form-input" id="alertCondition">
+          <option value="per_below">PER 이하</option>
+          <option value="per_above">PER 이상</option>
+          <option value="price_below">주가 이하</option>
+          <option value="price_above">주가 이상</option>
+          <option value="change_pct">등락률 ±</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">기준값</label>
+        <input class="form-input" id="alertValue" type="number" placeholder="예: 8">
+      </div>
+    </div>
+    <button class="btn-primary" onclick="addAlert()">+ 알림 추가</button>
+  </div>
+</div>
+
+<!-- AI API Setup Modal -->
+<div class="modal-overlay" id="aiApiModal">
+  <div class="modal">
+    <div class="modal-title">
+      🧠 AI Prime Tech API 설정
+      <button class="modal-close" onclick="document.getElementById('aiApiModal').classList.remove('open')">✕</button>
+    </div>
+
+    <!-- Step guide -->
+    <div style="background:var(--bg3);border-radius:10px;margin-bottom:16px;">
+      <div class="step-list">
+        <div class="step-item">
+          <a href="https://aiprime.tech" target="_blank">aiprime.tech</a> 접속 → 로그인 → 좌측 <strong style="color:var(--text)">API 키</strong> 메뉴
+        </div>
+        <div class="step-item">
+          <strong style="color:var(--text)">API 키 생성</strong> 클릭 → 키 이름 입력 → 복사
+        </div>
+        <div class="step-item">
+          아래 <strong style="color:var(--text)">API 키</strong> 란에 붙여넣기. 잔액은 사이트에서 충전 가능 (현재 $19.03 확인됨)
+        </div>
+      </div>
+    </div>
+
+    <div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.25);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;line-height:1.7;">
+      <strong style="color:#a78bfa;">💡 AI Prime Tech란?</strong><br>
+      Anthropic Claude API의 프록시 서비스입니다. 동일한 API 형식을 사용하며,<br>
+      이 대시보드에서 종목 분석을 요청할 때마다 소량의 비용($0.001~0.01)이 차감됩니다.
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">AI Prime Tech API 키</label>
+      <input class="form-input" id="inputAiKey" placeholder="sk-..." type="password" autocomplete="off">
+      <div class="form-hint">입력한 키는 localStorage에만 저장되며 외부로 전송되지 않습니다.</div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">엔드포인트 URL</label>
+        <input class="form-input" id="inputAiEndpoint" value="https://api.aiprime.tech/v1" placeholder="https://api.aiprime.tech/v1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">모델</label>
+        <select class="form-input" id="inputAiModel">
+          <option value="claude-haiku-4-5-20251001" selected>claude-haiku-4-5 (기본 · 가장 저렴)</option>
+          <option value="claude-sonnet-4-6">claude-sonnet-4-6 (중간)</option>
+          <option value="claude-opus-4-6">claude-opus-4-6 (고급)</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="background:var(--bg3);border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">예상 비용 (분석 1회당)</div>
+      <div style="display:flex;gap:16px;font-size:12px;">
+        <span>Haiku: <span style="color:var(--green);font-family:var(--mono)">~$0.001</span></span>
+        <span>Sonnet: <span style="color:var(--amber);font-family:var(--mono)">~$0.005</span></span>
+        <span>Opus: <span style="color:#f87171;font-family:var(--mono)">~$0.02</span></span>
+      </div>
+    </div>
+
+    <button class="btn-primary" onclick="saveAiConfig()">✓ 저장 및 연결 테스트</button>
+    <button class="btn-secondary" onclick="document.getElementById('aiApiModal').classList.remove('open')">취소</button>
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────
+const state = {
+  page: 'overview',
+  interval: '5m',
+  apiConfig: null,
+  aiConfig: null,
+  isLive: false,
+  alerts: [],
+  watchlist: [],
+  filterSector: 'all',
+  sortCol: 'per',
+  sortAsc: true,
+  refreshTimer: null,
+  perChart: null,
+  aiCostTotal: 0,
+};
+
+// ─── Demo Data ───────────────────────────────────────────
+const SECTORS = [
+  { id:'semi',    name:'반도체·HBM',    color:'#3b82f6', per:8.2,  growth:91, marketPer:10 },
+  { id:'defense', name:'방산·조선',      color:'#10b981', per:9.8,  growth:55, marketPer:12 },
+  { id:'finance', name:'금융·증권·지주', color:'#8b5cf6', per:5.4,  growth:22, marketPer:9  },
+  { id:'power',   name:'전력기기·에너지',color:'#f59e0b', per:8.9,  growth:42, marketPer:11 },
+  { id:'bio',     name:'제약·바이오',    color:'#ef4444', per:14.2, growth:38, marketPer:18 },
+  { id:'beauty',  name:'화장품·K소비재', color:'#14b8a6', per:10.1, growth:52, marketPer:14 },
+];
+
+const STOCKS = [
+  { code:'000660', name:'SK하이닉스',      sector:'semi',    price:198400, chg:+3.2, per:7.8,  pbr:2.1, roe:32.4, eps_growth:142, score:5 },
+  { code:'005930', name:'삼성전자',         sector:'semi',    price:88600,  chg:+2.3, per:8.4,  pbr:1.4, roe:18.2, eps_growth:98,  score:5 },
+  { code:'012450', name:'한화에어로스페이스',sector:'defense', price:372000, chg:+1.1, per:9.2,  pbr:3.4, roe:22.1, eps_growth:68,  score:4 },
+  { code:'009540', name:'HD현대중공업',     sector:'defense', price:185000, chg:-0.8, per:10.1, pbr:2.0, roe:19.8, eps_growth:44,  score:4 },
+  { code:'105560', name:'KB금융',           sector:'finance', price:92000,  chg:+0.5, per:5.2,  pbr:0.7, roe:12.1, eps_growth:15,  score:4 },
+  { code:'016360', name:'삼성증권',         sector:'finance', price:56400,  chg:+1.8, per:6.1,  pbr:0.9, roe:14.3, eps_growth:28,  score:3 },
+  { code:'298040', name:'효성중공업',       sector:'power',   price:296000, chg:+4.2, per:8.7,  pbr:2.8, roe:31.2, eps_growth:67,  score:5 },
+  { code:'066970', name:'LS ELECTRIC',     sector:'power',   price:142000, chg:+2.9, per:9.3,  pbr:1.9, roe:22.6, eps_growth:41,  score:4 },
+  { code:'128940', name:'한미약품',         sector:'bio',     price:348000, chg:-1.2, per:13.4, pbr:2.3, roe:18.7, eps_growth:32,  score:3 },
+  { code:'077970', name:'파마리서치',       sector:'bio',     price:182000, chg:+3.8, per:11.2, pbr:6.1, roe:54.2, eps_growth:61,  score:4 },
+  { code:'002790', name:'아모레퍼시픽',     sector:'beauty',  price:141500, chg:+1.4, per:9.8,  pbr:1.2, roe:12.4, eps_growth:48,  score:3 },
+  { code:'278470', name:'에이피알',         sector:'beauty',  price:218000, chg:+5.1, per:8.9,  pbr:3.8, roe:42.3, eps_growth:85,  score:5 },
+  { code:'011070', name:'LG이노텍',         sector:'semi',    price:198000, chg:-0.3, per:9.1,  pbr:1.6, roe:18.9, eps_growth:54,  score:4 },
+  { code:'042700', name:'한미반도체',       sector:'semi',    price:134000, chg:+2.7, per:7.2,  pbr:4.2, roe:58.1, eps_growth:122, score:5 },
+  { code:'064260', name:'현대로템',         sector:'defense', price:88800,  chg:+0.9, per:11.3, pbr:2.4, roe:21.3, eps_growth:38,  score:3 },
+];
+
+const MARKET_DATA = {
+  kospi:  { value: 6462, chg: -0.20, per: 7.6,  per_hist: 10.0 },
+  kosdaq: { value: 1200, chg: +2.20, per: 14.9, per_hist: 18.0 },
+  usd:    { value: 1482.60, chg: -0.09 },
+  vix:    { value: 18.4, chg: -3.2 },
+};
+
+let alertRules = JSON.parse(localStorage.getItem('per_alerts') || '[]');
+let watchlist  = JSON.parse(localStorage.getItem('per_watchlist') || '[]');
+let liveStocks = STOCKS.map(s => ({...s}));
+
+// ─── Init ─────────────────────────────────────────────────
+function init() {
+  loadApiConfig();
+  loadAiConfig();
+  renderPage();
+  buildTicker();
+  setInterval(tickData, 3000);
+  updateLastUpdate();
+  document.getElementById('alertCount').textContent = alertRules.length;
+}
+
+// ─── Pages ───────────────────────────────────────────────
+function setPage(p) {
+  state.page = p;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  event.currentTarget?.classList.add('active');
+  const titles = {overview:'시장 개요', screener:'종목 스크리너', sectors:'업종 분석', alerts:'알림 설정', watchlist:'관심 종목', ai_analysis:'🤖 AI 종목 분석', ai_cost:'💰 AI 비용 추적'};
+  document.getElementById('pageTitle').textContent = titles[p] || p;
+  renderPage();
+}
+
+function renderPage() {
+  const c = document.getElementById('content');
+  if (state.page === 'overview')     c.innerHTML = buildOverview();
+  if (state.page === 'screener')     c.innerHTML = buildScreener();
+  if (state.page === 'sectors')      c.innerHTML = buildSectors();
+  if (state.page === 'alerts')       c.innerHTML = buildAlertsPage();
+  if (state.page === 'watchlist')    c.innerHTML = buildWatchlistPage();
+  if (state.page === 'ai_analysis')  c.innerHTML = buildAiPage();
+  if (state.page === 'ai_cost')      c.innerHTML = buildAiCostPage();
+  afterRender();
+}
+
+// ─── Overview Page ────────────────────────────────────────
+function buildOverview() {
+  return `
+  <div class="market-row">
+    ${mktCard('KOSPI', MARKET_DATA.kospi.value.toLocaleString(), MARKET_DATA.kospi.chg, 'PER ' + MARKET_DATA.kospi.per + '배', MARKET_DATA.kospi.per / MARKET_DATA.kospi.per_hist * 100, '#3b82f6')}
+    ${mktCard('KOSDAQ', MARKET_DATA.kosdaq.value.toLocaleString(), MARKET_DATA.kosdaq.chg, 'PER ' + MARKET_DATA.kosdaq.per + '배', MARKET_DATA.kosdaq.per / MARKET_DATA.kosdaq.per_hist * 100, '#10b981')}
+    ${mktCard('USD/KRW', MARKET_DATA.usd.value.toLocaleString(), MARKET_DATA.usd.chg, '원', 55, '#f59e0b')}
+    ${mktCard('VIX', MARKET_DATA.vix.value, MARKET_DATA.vix.chg, '공포 지수', 35, '#8b5cf6')}
+  </div>
+
+  <div class="section-grid">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">업종별 PER 현황</span>
+        <span class="panel-sub">코스피 평균 대비</span>
+      </div>
+      <div class="panel-body">
+        <div class="sector-list">
+          ${SECTORS.map(s => `
+          <div class="sector-item" onclick="selectSector('${s.id}')">
+            <div class="sector-dot" style="background:${s.color}"></div>
+            <span class="sector-name">${s.name}</span>
+            <span class="sector-per">${s.per}배</span>
+            <span class="sector-growth ${s.growth > 50 ? 'up' : 'neutral'}">+${s.growth}%</span>
+            <div class="sector-bar-wrap">
+              <div class="sector-bar-bg">
+                <div class="sector-bar-inner" style="width:${Math.min(s.per/s.marketPer*100,100)}%;background:${s.color}"></div>
+              </div>
+            </div>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">PER 히스토리 (코스피)</span>
+        <span class="panel-sub">12개월 선행 기준</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap">
+          <canvas id="perChart"></canvas>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:12px;font-size:11px;color:var(--text3);">
+          <span><span style="color:#3b82f6">●</span> 코스피 PER</span>
+          <span><span style="color:#4d5a6e">●</span> 역사적 평균 (10배)</span>
+          <span><span style="color:#10b981">●</span> 현재 (7.6배)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">⭐ 고성장 저PER 종목 TOP 10</span>
+      <span class="panel-sub">EPS성장률 높고 PER 낮은 순</span>
+    </div>
+    <div class="panel-body" style="padding:0 0 8px;">
+      <div style="overflow-x:auto;">
+        ${buildStockTable(liveStocks.sort((a,b)=>(b.eps_growth/b.per)-(a.eps_growth/a.per)).slice(0,10), true)}
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+function mktCard(label, value, chg, sub, barPct, color) {
+  const cls = chg > 0 ? 'up' : chg < 0 ? 'down' : 'neutral';
+  const sign = chg > 0 ? '+' : '';
+  return `
+  <div class="market-card">
+    <div class="mc-label">${label}</div>
+    <div class="mc-value">${value}</div>
+    <div class="mc-sub ${cls}">${sign}${chg}%</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:2px;">${sub}</div>
+    <div class="mc-bar"><div class="mc-bar-fill" style="width:${barPct}%;background:${color};"></div></div>
+  </div>`;
+}
+
+// ─── Screener Page ────────────────────────────────────────
+function buildScreener() {
+  return `
+  <div class="filter-bar">
+    <input class="search-input" placeholder="🔍 종목명 검색..." oninput="filterStocks(this.value)" id="searchInput">
+    <div class="filter-chip ${state.filterSector==='all'?'active':''}" onclick="setSectorFilter('all')">전체</div>
+    ${SECTORS.map(s=>`<div class="filter-chip ${state.filterSector===s.id?'active':''}" onclick="setSectorFilter('${s.id}')" style="--dot:${s.color}">${s.name}</div>`).join('')}
+  </div>
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">저PER 성장주 스크리너</span>
+      <span class="panel-sub" id="stockCount">${liveStocks.length}개 종목</span>
+    </div>
+    <div style="overflow-x:auto;" id="stockTableWrap">
+      ${buildStockTable(getFilteredStocks(), false)}
+    </div>
+  </div>`;
+}
+
+function getFilteredStocks() {
+  let list = [...liveStocks];
+  if (state.filterSector !== 'all') list = list.filter(s => s.sector === state.filterSector);
+  const q = document.getElementById('searchInput')?.value?.toLowerCase() || '';
+  if (q) list = list.filter(s => s.name.includes(q) || s.code.includes(q));
+  list.sort((a, b) => {
+    const av = a[state.sortCol] ?? 0, bv = b[state.sortCol] ?? 0;
+    return state.sortAsc ? av - bv : bv - av;
+  });
+  return list;
+}
+
+function buildStockTable(list, compact) {
+  const cols = compact
+    ? [['name','종목'],['per','PER'],['eps_growth','EPS성장'],['price','주가'],['chg','등락'],['score','점수']]
+    : [['name','종목'],['per','PER↕'],['pbr','PBR↕'],['roe','ROE↕'],['eps_growth','EPS성장↕'],['price','주가↕'],['chg','등락↕'],['score','점수'],['_alert','알림'],['_watch','관심']];
+  return `
+  <table class="stock-table">
+    <thead><tr>
+      ${cols.map(([k,label])=>`<th onclick="sortBy('${k}')" ${k.startsWith('_')?'style="cursor:default"':''}>${label}</th>`).join('')}
+    </tr></thead>
+    <tbody>
+    ${list.map(s => {
+      const sec = SECTORS.find(x=>x.id===s.sector);
+      const perClass = s.per < 7 ? 'per-low' : s.per < 12 ? 'per-mid' : 'per-high';
+      const chgClass = s.chg > 0 ? 'up' : s.chg < 0 ? 'down' : 'neutral';
+      const dots = Array.from({length:5},(_,i)=>`<div class="score-dot" style="background:${i<s.score?(sec?.color||'#3b82f6'):'rgba(255,255,255,0.1)'}"></div>`).join('');
+      const isWatched = watchlist.includes(s.code);
+      const alertExists = alertRules.find(r=>r.code===s.code);
+      return `<tr>
+        <td><div class="stock-name">${s.name}</div><div class="stock-code">${s.code}</div></td>
+        <td><span class="per-badge ${perClass}">${s.per}x</span></td>
+        ${!compact?`<td style="font-family:var(--mono);font-size:12px;">${s.pbr}</td>`:''}
+        ${!compact?`<td style="font-family:var(--mono);font-size:12px;">${s.roe}%</td>`:''}
+        <td class="${s.eps_growth>50?'up':'neutral'}" style="font-family:var(--mono);font-size:12px;">+${s.eps_growth}%</td>
+        <td style="font-family:var(--mono);font-size:12px;">${s.price.toLocaleString()}원</td>
+        <td class="${chgClass}" style="font-family:var(--mono);font-size:12px;">${s.chg>0?'+':''}${s.chg}%</td>
+        <td><div class="score-dots">${dots}</div></td>
+        ${!compact?`<td><button class="alert-btn ${alertExists?'on':''}" onclick="quickAlert('${s.code}','${s.name}')">${alertExists?'🔔 ON':'+ 알림'}</button></td>`:''}
+        ${!compact?`<td><button class="alert-btn ${isWatched?'on':''}" onclick="toggleWatch('${s.code}','${s.name}')">${isWatched?'⭐':'☆'}</button></td>`:''}
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table>`;
+}
+
+function sortBy(col) {
+  if (col.startsWith('_')) return;
+  if (state.sortCol === col) state.sortAsc = !state.sortAsc;
+  else { state.sortCol = col; state.sortAsc = true; }
+  document.getElementById('stockTableWrap').innerHTML = buildStockTable(getFilteredStocks(), false);
+}
+
+function setSectorFilter(id) {
+  state.filterSector = id;
+  renderPage();
+}
+
+function filterStocks() {
+  document.getElementById('stockTableWrap').innerHTML = buildStockTable(getFilteredStocks(), false);
+}
+
+// ─── Sectors Page ─────────────────────────────────────────
+function buildSectors() {
+  return SECTORS.map(s => `
+  <div class="panel" style="margin-bottom:14px;">
+    <div class="panel-header">
+      <div class="sector-dot" style="background:${s.color};width:10px;height:10px;border-radius:50%;"></div>
+      <span class="panel-title">${s.name}</span>
+      <span class="per-badge per-${s.per<9?'low':s.per<13?'mid':'high'}" style="margin-left:8px;">${s.per}배</span>
+      <span class="panel-sub">EPS 성장 +${s.growth}%</span>
+    </div>
+    <div class="panel-body">
+      <div style="overflow-x:auto;">
+        ${buildStockTable(liveStocks.filter(x=>x.sector===s.id), false)}
+      </div>
+    </div>
+  </div>`).join('');
+}
+
+// ─── Alerts Page ──────────────────────────────────────────
+function buildAlertsPage() {
+  return `
+  <div class="section-grid">
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">🔔 알림 규칙</span></div>
+      <div class="panel-body">
+        ${alertRules.length === 0
+          ? '<div class="alert-empty">등록된 알림이 없습니다.<br>종목 스크리너에서 + 알림을 눌러 추가하세요.</div>'
+          : `<div class="alert-list">${alertRules.map((r,i)=>`
+            <div class="alert-item">
+              <span class="alert-icon">🔔</span>
+              <div style="flex:1;">
+                <div class="alert-text"><strong>${r.name}</strong> — ${condLabel(r.cond)} ${r.val}</div>
+                <div class="alert-time">${r.code}</div>
+              </div>
+              <button onclick="removeAlert(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;">✕</button>
+            </div>`).join('')}</div>`
+        }
+        <button class="btn-primary" style="margin-top:12px;" onclick="document.getElementById('alertModal').classList.add('open')">+ 새 알림 추가</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">📋 최근 알림 내역</span></div>
+      <div class="panel-body">
+        <div class="alert-list" id="alertHistory">
+          <div class="alert-empty">아직 발생한 알림이 없습니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:14px;">
+    <div class="panel-header"><span class="panel-title">⚙️ 알림 채널 설정</span></div>
+    <div class="panel-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+        ${['🔔 브라우저 알림 (웹 Push)', '📧 이메일 알림', '💬 텔레그램 봇', '📱 카카오 알림톡'].map((ch,i)=>`
+        <div style="background:var(--bg3);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:center;">
+          <span style="font-size:18px;">${ch.split(' ')[0]}</span>
+          <div style="flex:1;">
+            <div style="font-size:13px;">${ch.split(' ').slice(1).join(' ')}</div>
+            <div style="font-size:11px;color:var(--text3);">${i===0?'지원됨':'준비 중'}</div>
+          </div>
+          <button onclick="${i===0?'reqNotifPermission()':'showToast(\"준비 중인 기능입니다.\",\"info\")'}" class="alert-btn">${i===0?'허용':'설정'}</button>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ─── Watchlist Page ───────────────────────────────────────
+function buildWatchlistPage() {
+  const wl = liveStocks.filter(s => watchlist.includes(s.code));
+  return `
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">⭐ 관심 종목</span><span class="panel-sub">${wl.length}개</span></div>
+    <div class="panel-body" style="padding:0 0 8px;">
+      ${wl.length === 0
+        ? '<div class="alert-empty" style="padding:32px;">관심 종목이 없습니다.<br>스크리너에서 ☆ 버튼을 눌러 추가하세요.</div>'
+        : `<div style="overflow-x:auto;">${buildStockTable(wl, false)}</div>`}
+    </div>
+  </div>`;
+}
+
+// ─── Chart ───────────────────────────────────────────────
+function buildPerChart() {
+  const ctx = document.getElementById('perChart');
+  if (!ctx) return;
+  if (state.perChart) state.perChart.destroy();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr'];
+  const perData = [10.2,9.8,10.5,11.2,10.8,9.6,8.9,8.2,7.9,8.4,8.0,7.6,7.2,7.8,7.5,7.6];
+  state.perChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: months,
+      datasets: [
+        { label: 'PER', data: perData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', borderWidth: 2, pointRadius: 0, tension: 0.4, fill: true },
+        { label: '역사적평균', data: months.map(()=>10), borderColor: '#4d5a6e', borderWidth: 1, borderDash: [4,4], pointRadius: 0, tension: 0 },
+        { label: '저평가기준(8배)', data: months.map(()=>8), borderColor: '#10b981', borderWidth: 1, borderDash: [2,3], pointRadius: 0, tension: 0 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4d5a6e', font: { family:'JetBrains Mono', size:10 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4d5a6e', font: { family:'JetBrains Mono', size:10 } }, min: 6, max: 13 }
+      }
+    }
+  });
+}
+
+function afterRender() {
+  if (state.page === 'overview') buildPerChart();
+}
+
+// ─── Ticker ───────────────────────────────────────────────
+function buildTicker() {
+  const items = [...liveStocks, ...liveStocks];
+  document.getElementById('tickerTrack').innerHTML = items.map(s =>
+    `<div class="ticker-item"><span class="ticker-name">${s.name}</span><span class="ticker-price">${s.price.toLocaleString()}</span><span class="${s.chg>0?'up':'down'}" style="font-family:var(--mono);font-size:11px;">${s.chg>0?'+':''}${s.chg}%</span></div>`
+  ).join('');
+}
+
+// ─── Live Data Simulation / KIS API ──────────────────────
+function tickData() {
+  liveStocks.forEach(s => {
+    const delta = (Math.random() - 0.495) * 0.3;
+    s.price = Math.round(s.price * (1 + delta / 100));
+    s.chg = Math.round((s.chg + delta) * 10) / 10;
+    s.per = Math.round(s.per * (1 + delta/200) * 10) / 10;
+    checkAlerts(s);
+  });
+  if (state.page === 'overview' || state.page === 'screener') renderPage();
+  buildTicker();
+  updateLastUpdate();
+}
+
+async function fetchKisData() {
+  const cfg = state.apiConfig;
+  if (!cfg?.appKey) return;
+  try {
+    const base = cfg.env === 'paper' ? 'https://openapivts.koreainvestment.com:29443' : 'https://openapi.koreainvestment.com:9443';
+    // Token
+    const tokenRes = await fetch(base + '/oauth2/tokenP', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ grant_type:'client_credentials', appkey: cfg.appKey, appsecret: cfg.appSecret })
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) { showToast('토큰 발급 실패. API 키를 확인하세요.', 'warning'); return; }
+    cfg.token = tokenData.access_token;
+
+    // 종목별 현재가 조회
+    for (const s of liveStocks) {
+      try {
+        const r = await fetch(`${base}/uapi/domestic-stock/v1/quotations/inquire-price?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=${s.code}`, {
+          headers: {
+            'authorization': `Bearer ${cfg.token}`,
+            'appkey': cfg.appKey,
+            'appsecret': cfg.appSecret,
+            'tr_id': 'FHKST01010100',
+          }
+        });
+        const d = await r.json();
+        if (d.output?.stck_prpr) {
+          s.price = parseInt(d.output.stck_prpr);
+          s.chg = parseFloat(d.output.prdy_ctrt);
+        }
+      } catch(e) {}
+      await new Promise(r=>setTimeout(r,100)); // rate limit
+    }
+    setLiveStatus(true);
+    showToast('실시간 데이터 연결 성공!', 'success');
+  } catch(e) {
+    showToast('API 연결 실패: ' + e.message, 'warning');
+    setLiveStatus(false);
+  }
+}
+
+// ─── Alert Logic ─────────────────────────────────────────
+function checkAlerts(s) {
+  alertRules.forEach(r => {
+    if (r.code !== s.code) return;
+    let triggered = false;
+    if (r.cond === 'per_below' && s.per < r.val) triggered = true;
+    if (r.cond === 'per_above' && s.per > r.val) triggered = true;
+    if (r.cond === 'price_below' && s.price < r.val) triggered = true;
+    if (r.cond === 'price_above' && s.price > r.val) triggered = true;
+    if (triggered && !r.lastFired) {
+      r.lastFired = Date.now();
+      fireAlert(s, r);
+    }
+    if (!triggered) r.lastFired = null;
+  });
+}
+
+function fireAlert(s, r) {
+  showToast(`🔔 ${s.name}: ${condLabel(r.cond)} ${r.val} 조건 달성!`, 'warning');
+  if (Notification.permission === 'granted') {
+    new Notification('PER 레이더 알림', { body: `${s.name} — ${condLabel(r.cond)} ${r.val}`, icon: '📊' });
+  }
+  const h = document.getElementById('alertHistory');
+  if (h) {
+    const el = document.createElement('div');
+    el.className = 'alert-item new triggered';
+    el.innerHTML = `<span class="alert-icon">⚡</span><div><div class="alert-text"><strong>${s.name}</strong> ${condLabel(r.cond)} ${r.val} 달성</div><div class="alert-time">${new Date().toLocaleTimeString('ko-KR')}</div></div>`;
+    h.prepend(el);
+    const empty = h.querySelector('.alert-empty');
+    if (empty) empty.remove();
+  }
+}
+
+function condLabel(c) {
+  return {per_below:'PER <', per_above:'PER >', price_below:'주가 <', price_above:'주가 >', change_pct:'등락 ±'}[c] || c;
+}
+
+function addAlert() {
+  const stock = document.getElementById('alertStock').value.trim();
+  const cond  = document.getElementById('alertCondition').value;
+  const val   = parseFloat(document.getElementById('alertValue').value);
+  if (!stock || isNaN(val)) { showToast('종목명과 기준값을 입력하세요.', 'warning'); return; }
+  const found = liveStocks.find(s => s.name.includes(stock) || s.code === stock);
+  alertRules.push({ code: found?.code || stock, name: found?.name || stock, cond, val, lastFired: null });
+  localStorage.setItem('per_alerts', JSON.stringify(alertRules));
+  document.getElementById('alertCount').textContent = alertRules.length;
+  document.getElementById('alertModal').classList.remove('open');
+  showToast(`${found?.name||stock} 알림이 등록되었습니다.`, 'success');
+  if (state.page === 'alerts') renderPage();
+}
+
+function quickAlert(code, name) {
+  const existing = alertRules.findIndex(r => r.code === code);
+  if (existing >= 0) {
+    alertRules.splice(existing, 1);
+    showToast(`${name} 알림 해제`, 'info');
+  } else {
+    const s = liveStocks.find(x => x.code === code);
+    alertRules.push({ code, name, cond: 'per_below', val: Math.round(s.per * 0.9 * 10)/10, lastFired: null });
+    showToast(`${name} PER ${Math.round(s.per * 0.9 * 10)/10} 이하 알림 설정`, 'success');
+  }
+  localStorage.setItem('per_alerts', JSON.stringify(alertRules));
+  document.getElementById('alertCount').textContent = alertRules.length;
+  if (state.page === 'screener') renderPage();
+}
+
+function removeAlert(i) { alertRules.splice(i,1); localStorage.setItem('per_alerts', JSON.stringify(alertRules)); renderPage(); }
+
+function reqNotifPermission() {
+  Notification.requestPermission().then(p => {
+    showToast(p === 'granted' ? '알림이 허용되었습니다!' : '알림이 차단되었습니다.', p==='granted'?'success':'warning');
+  });
+}
+
+// ─── Watchlist ────────────────────────────────────────────
+function toggleWatch(code, name) {
+  const idx = watchlist.indexOf(code);
+  if (idx >= 0) { watchlist.splice(idx,1); showToast(`${name} 관심 종목 해제`, 'info'); }
+  else { watchlist.push(code); showToast(`${name} 관심 종목 추가`, 'success'); }
+  localStorage.setItem('per_watchlist', JSON.stringify(watchlist));
+  if (state.page === 'screener' || state.page === 'watchlist') renderPage();
+}
+
+// ─── API Config ───────────────────────────────────────────
+function openApiModal() { document.getElementById('apiModal').classList.add('open'); }
+function closeApiModal() { document.getElementById('apiModal').classList.remove('open'); }
+
+function saveApiConfig() {
+  const cfg = {
+    appKey: document.getElementById('inputAppKey').value.trim(),
+    appSecret: document.getElementById('inputAppSecret').value.trim(),
+    env: document.getElementById('inputEnv').value,
+    refreshSec: parseInt(document.getElementById('inputRefreshInterval').value),
+  };
+  if (!cfg.appKey || !cfg.appSecret) { showToast('App Key와 Secret을 모두 입력하세요.', 'warning'); return; }
+  localStorage.setItem('per_api_config', JSON.stringify(cfg));
+  state.apiConfig = cfg;
+  closeApiModal();
+  setupRefreshTimer();
+  fetchKisData();
+}
+
+function loadApiConfig() {
+  const raw = localStorage.getItem('per_api_config');
+  if (!raw) return;
+  state.apiConfig = JSON.parse(raw);
+  document.getElementById('inputAppKey').value = state.apiConfig.appKey || '';
+  document.getElementById('inputEnv').value = state.apiConfig.env || 'paper';
+  setupRefreshTimer();
+}
+
+function setupRefreshTimer() {
+  if (state.refreshTimer) clearInterval(state.refreshTimer);
+  const sec = state.apiConfig?.refreshSec || 300;
+  state.refreshTimer = setInterval(() => {
+    if (state.apiConfig?.appKey) fetchKisData();
+  }, sec * 1000);
+}
+
+function useDemoMode() {
+  closeApiModal();
+  showToast('데모 모드로 실행합니다. 시뮬레이션 데이터가 사용됩니다.', 'info');
+}
+
+function setLiveStatus(live) {
+  state.isLive = live;
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  dot.className = 'status-dot ' + (live ? 'live' : 'demo');
+  txt.textContent = live ? '실시간 연결됨' : '데모 모드';
+}
+
+// ─── UI Helpers ───────────────────────────────────────────
+function setInterval_(v) {
+  state.interval = v;
+  document.querySelectorAll('.interval-tab').forEach(el => {
+    el.classList.toggle('active', el.textContent === {'1m':'1분','5m':'5분','1h':'1시간','1d':'일봉'}[v]);
+  });
+  showToast(`갱신 주기: ${{'1m':'1분','5m':'5분','1h':'1시간','1d':'일봉'}[v]}`, 'info');
+}
+
+function refreshData() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  if (state.apiConfig?.appKey) fetchKisData();
+  else tickData();
+  setTimeout(() => btn.classList.remove('spinning'), 800);
+}
+
+function updateLastUpdate() {
+  document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ko-KR');
+}
+
+function showToast(msg, type='info') {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<span>${{'success':'✓','warning':'⚠','info':'ℹ'}[type]}</span><span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+function selectSector(id) {
+  state.filterSector = id;
+  setPage('sectors');
+  document.querySelectorAll('.nav-item').forEach((el,i) => { if(i===2) el.classList.add('active'); else el.classList.remove('active'); });
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').style.display = document.getElementById('sidebar').classList.contains('open') ? 'block' : 'none';
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').style.display = 'none';
+}
+
+// ─── AI Analysis Page ─────────────────────────────────────
+function buildAiPage() {
+  const hasKey = !!state.aiConfig?.apiKey;
+  return `
+  ${!hasKey ? `
+  <div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.25);border-radius:12px;padding:16px 20px;margin-bottom:16px;display:flex;gap:14px;align-items:center;">
+    <span style="font-size:28px;">🧠</span>
+    <div style="flex:1;">
+      <div style="font-size:14px;font-weight:500;margin-bottom:4px;">AI Prime Tech API가 연결되지 않았습니다</div>
+      <div style="font-size:12px;color:var(--text2);">설정에서 API 키를 입력하면 Claude AI가 종목을 실시간 분석해 드립니다.</div>
+    </div>
+    <button class="btn-primary" style="width:auto;padding:8px 18px;white-space:nowrap;" onclick="openAiApiModal()">🔑 API 연결</button>
+  </div>` : ''}
+
+  <div class="section-grid">
+    <div class="panel" style="grid-column:1/-1;">
+      <div class="panel-header">
+        <span class="panel-title">🤖 AI 종목 분석 요청</span>
+        <span class="panel-sub" style="color:var(--green);">AI Prime Tech · Claude Sonnet</span>
+      </div>
+      <div class="panel-body">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+          <select class="form-input" id="aiStockSelect" style="width:auto;flex:1;min-width:160px;">
+            ${liveStocks.map(s=>`<option value="${s.code}">${s.name} (PER ${s.per}x)</option>`).join('')}
+          </select>
+          <select class="form-input" id="aiAnalysisType" style="width:auto;flex:1;min-width:160px;">
+            <option value="full">종합 투자 분석</option>
+            <option value="per">PER 저평가 근거</option>
+            <option value="risk">리스크 분석</option>
+            <option value="sector">업종 경쟁력 분석</option>
+            <option value="summary">3줄 요약</option>
+          </select>
+          <button class="btn-primary" style="width:auto;padding:8px 20px;" onclick="runAiAnalysis()" id="aiRunBtn">
+            ${hasKey ? '✨ AI 분석 실행' : '🔑 API 키 필요'}
+          </button>
+        </div>
+
+        <!-- Quick Prompt Chips -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
+          ${['저PER 이유 설명', '성장 모멘텀 분석', '목표주가 추정', '매수/관망/매도 판단', '동종업계 비교'].map(t=>
+            `<span class="filter-chip" onclick="setAiPrompt('${t}')">${t}</span>`
+          ).join('')}
+        </div>
+
+        <textarea id="aiCustomPrompt" class="form-input" rows="3" style="width:100%;resize:vertical;font-family:var(--sans);" placeholder="직접 분석 질문을 입력하세요. 예: 이 종목의 PER이 낮은 이유가 가치함정인지 성장 기회인지 분석해줘"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Result -->
+  <div class="panel" style="margin-top:14px;" id="aiResultPanel">
+    <div class="panel-header">
+      <span class="panel-title" id="aiResultTitle">분석 결과</span>
+      <span class="panel-sub" id="aiResultCost" style="color:var(--amber);font-family:var(--mono);"></span>
+    </div>
+    <div class="panel-body" id="aiResultBody" style="min-height:120px;">
+      <div style="color:var(--text3);font-size:13px;text-align:center;padding:32px 0;">
+        종목과 분석 유형을 선택한 뒤 AI 분석 실행을 눌러주세요.<br>
+        <span style="font-size:11px;">분석 1회당 약 $0.001~0.01 비용이 AI Prime Tech 잔액에서 차감됩니다.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch Analysis -->
+  <div class="panel" style="margin-top:14px;">
+    <div class="panel-header">
+      <span class="panel-title">⚡ 배치 분석 — TOP 저PER 종목 일괄 분석</span>
+      <span class="panel-sub">한 번에 여러 종목 분석</span>
+    </div>
+    <div class="panel-body">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <select class="form-input" id="batchCount" style="width:auto;">
+          <option value="3">상위 3종목</option>
+          <option value="5" selected>상위 5종목</option>
+          <option value="10">상위 10종목</option>
+        </select>
+        <button class="btn-primary" style="width:auto;padding:8px 18px;" onclick="runBatchAnalysis()">🚀 일괄 분석 시작</button>
+        <span style="font-size:12px;color:var(--text3);">예상 비용: <span id="batchCostEst" style="font-family:var(--mono);color:var(--amber);">~$0.0010</span></span>
+      </div>
+      <div id="batchResults" style="margin-top:14px;"></div>
+    </div>
+  </div>`;
+}
+
+// ─── AI Cost Tracker Page ─────────────────────────────────
+function buildAiCostPage() {
+  const history = JSON.parse(localStorage.getItem('per_ai_cost_history') || '[]');
+  const total = history.reduce((s, r) => s + (r.cost || 0), 0);
+  return `
+  <div class="market-row" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+    ${[
+      ['총 분석 비용', '$' + total.toFixed(4), '누적', '#ef4444'],
+      ['분석 횟수', history.length + '회', '총 요청', '#3b82f6'],
+      ['평균 비용', history.length ? '$' + (total/history.length).toFixed(4) : '$0', '1회당', '#f59e0b'],
+      ['남은 잔액', state.aiConfig?.balance || '—', 'AI Prime Tech', '#10b981'],
+    ].map(([l,v,s,c]) => `
+    <div class="market-card">
+      <div class="mc-label">${l}</div>
+      <div class="mc-value" style="color:${c};font-size:18px;">${v}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px;">${s}</div>
+    </div>`).join('')}
+  </div>
+
+  <div class="panel" style="margin-top:14px;">
+    <div class="panel-header">
+      <span class="panel-title">📋 AI 분석 요청 내역</span>
+      <button onclick="clearAiHistory()" style="font-size:11px;background:none;border:1px solid var(--border2);color:var(--text3);padding:3px 10px;border-radius:5px;cursor:pointer;">초기화</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="stock-table">
+        <thead><tr>
+          <th>시각</th><th>종목</th><th>분석유형</th><th>모델</th><th>토큰</th><th>비용</th>
+        </tr></thead>
+        <tbody>
+        ${history.length === 0 ? `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px;">아직 분석 내역이 없습니다.</td></tr>` :
+          history.slice().reverse().map(r => `<tr>
+            <td style="font-family:var(--mono);font-size:11px;">${r.time}</td>
+            <td><div class="stock-name">${r.stock}</div></td>
+            <td style="color:var(--text2);font-size:12px;">${r.type}</td>
+            <td style="font-family:var(--mono);font-size:11px;color:var(--text3);">${r.model}</td>
+            <td style="font-family:var(--mono);font-size:12px;">${(r.tokens||0).toLocaleString()}</td>
+            <td style="font-family:var(--mono);font-size:12px;color:var(--amber);">$${(r.cost||0).toFixed(4)}</td>
+          </tr>`).join('')
+        }
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+// ─── AI API Functions (비용 최적화 버전) ──────────────────
+function openAiApiModal() {
+  document.getElementById('aiApiModal').classList.add('open');
+}
+
+function saveAiConfig() {
+  const key      = document.getElementById('inputAiKey').value.trim();
+  const endpoint = document.getElementById('inputAiEndpoint').value.trim();
+  const model    = document.getElementById('inputAiModel').value;
+  if (!key) { showToast('API 키를 입력하세요.', 'warning'); return; }
+  const cfg = { apiKey: key, endpoint: endpoint || 'https://api.aiprime.tech/v1', model };
+  localStorage.setItem('per_ai_config', JSON.stringify(cfg));
+  state.aiConfig = cfg;
+  document.getElementById('aiApiModal').classList.remove('open');
+  const badge = document.getElementById('aiApiBadge');
+  if (badge) { badge.textContent = '연결됨'; badge.style.background = 'var(--green)'; }
+  showToast('AI API 설정 저장됨. 연결 테스트 중...', 'info');
+  testAiConnection();
+}
+
+function loadAiConfig() {
+  const raw = localStorage.getItem('per_ai_config');
+  if (!raw) return;
+  state.aiConfig = JSON.parse(raw);
+  if (document.getElementById('inputAiKey'))      document.getElementById('inputAiKey').value      = state.aiConfig.apiKey   || '';
+  if (document.getElementById('inputAiEndpoint')) document.getElementById('inputAiEndpoint').value = state.aiConfig.endpoint || '';
+  if (document.getElementById('inputAiModel'))    document.getElementById('inputAiModel').value    = state.aiConfig.model    || 'claude-haiku-4-5-20251001';
+  const badge = document.getElementById('aiApiBadge');
+  if (badge && state.aiConfig.apiKey) { badge.textContent = '연결됨'; badge.style.background = 'var(--green)'; }
+  const bal = document.getElementById('aiBalanceDisplay');
+  if (bal && state.aiConfig.balance) bal.textContent = state.aiConfig.balance;
+}
+
+async function testAiConnection() {
+  if (!state.aiConfig?.apiKey) return;
+  try {
+    // 연결 테스트는 가장 짧은 Haiku + 10토큰 — 거의 $0
+    const res = await callAiApiRaw('OK', 10, 'claude-haiku-4-5-20251001');
+    if (res) { showToast('✅ AI Prime Tech 연결 성공!', 'success'); setLiveStatus(true); }
+  } catch(e) { showToast('AI 연결 실패: ' + e.message, 'warning'); }
+}
+
+// ── 비용 테이블 (입력/출력 토큰당 $, per 1K tokens) ───────
+const COST_RATES = {
+  'claude-haiku-4-5-20251001': [0.00025, 0.00125],  // 가장 저렴
+  'claude-sonnet-4-6':         [0.003,   0.015  ],  // 중간
+  'claude-opus-4-6':           [0.015,   0.075  ],  // 고급
+};
+
+// ── 분석 유형별 max_tokens (필요 이상 생성 방지) ──────────
+const MAX_TOKENS_MAP = {
+  summary:  150,   // 3줄 요약 — $0.0002 수준
+  per:      300,   // PER 판단
+  risk:     300,   // 리스크
+  sector:   350,   // 업종 경쟁력
+  full:     600,   // 종합 분석
+  batch:    150,   // 배치용
+  custom:   500,   // 직접 입력
+};
+
+// ── 결과 캐시 (30분 유효) ─────────────────────────────────
+const AI_CACHE = {};
+const CACHE_TTL = 30 * 60 * 1000; // 30분
+
+function getCacheKey(code, type, customPrompt) {
+  return `${code}__${type}__${customPrompt || ''}`;
+}
+function getCache(key) {
+  const hit = AI_CACHE[key];
+  if (!hit) return null;
+  if (Date.now() - hit.ts > CACHE_TTL) { delete AI_CACHE[key]; return null; }
+  return hit;
+}
+function setCache(key, data) {
+  AI_CACHE[key] = { ...data, ts: Date.now() };
+}
+
+// ── 핵심 API 호출 (모델·토큰 명시적 전달) ────────────────
+async function callAiApiRaw(prompt, maxTokens, model) {
+  const cfg = state.aiConfig;
+  if (!cfg?.apiKey) throw new Error('API 키가 설정되지 않았습니다.');
+  const endpoint = (cfg.endpoint || 'https://api.aiprime.tech/v1') + '/messages';
+  // 시스템 프롬프트 최소화 — 한국어 짧은 지시만
+  const system = '한국 주식 애널리스트. 마크다운(##,**,-)으로 간결하게 답변.';
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json', 'x-api-key': cfg.apiKey, 'anthropic-version':'2023-06-01' },
+    body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role:'user', content: prompt }] }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  const inTok  = data.usage?.input_tokens  || 0;
+  const outTok = data.usage?.output_tokens || 0;
+  const rates  = COST_RATES[model] || COST_RATES['claude-sonnet-4-6'];
+  const cost   = (inTok / 1000 * rates[0]) + (outTok / 1000 * rates[1]);
+  state.aiCostTotal += cost;
+  return { text: data.content?.[0]?.text || '', tokens: inTok + outTok, cost, cached: false };
+}
+
+// ── 외부에서 쓰는 callAiApi — 캐시·모델·토큰 자동 결정 ─────
+async function callAiApi(prompt, maxTokens, type, cacheKey) {
+  // 1. 캐시 우선 확인
+  if (cacheKey) {
+    const hit = getCache(cacheKey);
+    if (hit) { showToast('💾 캐시 결과 사용 (비용 $0)', 'info'); return { ...hit, cost: 0, cached: true }; }
+  }
+  // 2. 모델 결정: summary/batch → 강제 Haiku, 나머지는 설정값
+  const cfg   = state.aiConfig;
+  const model = (type === 'summary' || type === 'batch')
+    ? 'claude-haiku-4-5-20251001'
+    : (cfg?.model || 'claude-haiku-4-5-20251001');
+  // 3. 토큰 상한: 유형별 MAP 우선, 인수 maxTokens 무시
+  const tokens = MAX_TOKENS_MAP[type] || maxTokens || 400;
+  const result = await callAiApiRaw(prompt, tokens, model);
+  // 4. 캐시 저장
+  if (cacheKey) setCache(cacheKey, result);
+  return result;
+}
+
+// ── 종목 데이터를 최소한의 문자열로 압축 ─────────────────
+function buildStockContext(stock, sec) {
+  // 긴 설명 없이 숫자만 — 토큰 약 40% 절감
+  return `${stock.name}|${sec?.name}|PER${stock.per}|PBR${stock.pbr}|ROE${stock.roe}%|EPS+${stock.eps_growth}%|업종평균PER${sec?.marketPer}`;
+}
+
+function setAiPrompt(text) {
+  const el = document.getElementById('aiCustomPrompt');
+  if (el) el.value = text;
+}
+
+async function runAiAnalysis() {
+  if (!state.aiConfig?.apiKey) { openAiApiModal(); return; }
+  const code   = document.getElementById('aiStockSelect')?.value;
+  const type   = document.getElementById('aiAnalysisType')?.value || 'full';
+  const custom = document.getElementById('aiCustomPrompt')?.value?.trim();
+  const stock  = liveStocks.find(s => s.code === code);
+  if (!stock) return;
+  const sec = SECTORS.find(x => x.id === stock.sector);
+  const ctx = buildStockContext(stock, sec);
+
+  // 유형별 최소 프롬프트
+  const prompts = {
+    full:    `${ctx}\n종합분석: 1)PER저평가여부 2)성장근거 3)리스크 4)매수/관망/매도`,
+    per:     `${ctx}\nPER 저평가 vs 가치함정 판단`,
+    risk:    `${ctx}\n투자 리스크 3가지`,
+    sector:  `${ctx}\n업종경쟁력과 시장포지션`,
+    summary: `${ctx}\n투자포인트·리스크·결론 각 1줄`,
+  };
+  const prompt   = custom ? `${ctx}\n${custom}` : (prompts[type] || prompts.full);
+  const cacheKey = custom ? null : getCacheKey(code, type, '');
+
+  const btn    = document.getElementById('aiRunBtn');
+  const body   = document.getElementById('aiResultBody');
+  const title  = document.getElementById('aiResultTitle');
+  const costEl = document.getElementById('aiResultCost');
+  if (btn) btn.disabled = true;
+  if (title) title.textContent = `${stock.name} 분석 중...`;
+  if (body)  body.innerHTML = `<div style="display:flex;align-items:center;gap:12px;padding:24px 0;color:var(--text2);"><span style="animation:spin 1s linear infinite;display:inline-block;">↻</span> Claude AI 분석 중...</div>`;
+
+  try {
+    const result = await callAiApi(prompt, null, custom ? 'custom' : type, cacheKey);
+    if (title) title.textContent = `${stock.name} 분석 완료${result.cached ? ' (캐시)' : ''}`;
+    if (costEl) {
+      const saved = result.cached ? ' · 💾 캐시 (비용 절감!)' : '';
+      costEl.textContent = `비용: $${result.cost.toFixed(4)} · ${result.tokens.toLocaleString()} 토큰${saved}`;
+    }
+    if (body) body.innerHTML = `<div style="line-height:1.8;font-size:13px;" id="aiMarkdown"></div>`;
+    document.getElementById('aiMarkdown').innerHTML = markdownToHtml(result.text);
+    if (!result.cached) saveAiHistory(stock.name, type, state.aiConfig.model, result.tokens, result.cost);
+    showToast(`${stock.name} 분석 완료 · $${result.cost.toFixed(4)}${result.cached?' (캐시)':''}`, 'success');
+  } catch(e) {
+    if (body) body.innerHTML = `<div style="color:#f87171;padding:16px;">오류: ${e.message}<br><br><button class="btn-primary" style="width:auto;padding:6px 16px;" onclick="openAiApiModal()">API 설정 확인</button></div>`;
+    showToast('AI 분석 실패: ' + e.message, 'warning');
+  }
+  if (btn) btn.disabled = false;
+}
+
+async function runBatchAnalysis() {
+  if (!state.aiConfig?.apiKey) { openAiApiModal(); return; }
+  const n   = parseInt(document.getElementById('batchCount')?.value || '5');
+  const top = [...liveStocks].sort((a,b) => (b.eps_growth/b.per) - (a.eps_growth/a.per)).slice(0, n);
+  const container = document.getElementById('batchResults');
+  if (container) container.innerHTML = '<div style="color:var(--text3);font-size:13px;">분석 시작 (Haiku 모델 · 비용 최소화)...</div>';
+  let results = [];
+  for (let i = 0; i < top.length; i++) {
+    const s   = top[i];
+    const sec = SECTORS.find(x => x.id === s.sector);
+    if (container) container.innerHTML = `<div style="color:var(--text2);font-size:13px;">분석 중 (${i+1}/${top.length}): ${s.name}...</div>`;
+    const ck = getCacheKey(s.code, 'batch', '');
+    try {
+      // 배치는 무조건 Haiku + 150토큰 + 캐시
+      const prompt = `${buildStockContext(s, sec)}\n투자포인트·리스크·결론 각 1줄`;
+      const r = await callAiApi(prompt, null, 'batch', ck);
+      results.push({ stock: s, text: r.text, cost: r.cost, cached: r.cached });
+      if (!r.cached) saveAiHistory(s.name, '배치분석', 'claude-haiku-4-5-20251001', r.tokens, r.cost);
+    } catch(e) {
+      results.push({ stock: s, text: '분석 실패: ' + e.message, cost: 0, cached: false });
+    }
+    await new Promise(r => setTimeout(r, 300)); // 짧은 딜레이
+  }
+  if (container) {
+    container.innerHTML = results.map(r => `
+    <div style="background:var(--bg3);border-radius:10px;padding:12px 14px;margin-bottom:10px;border-left:3px solid ${SECTORS.find(x=>x.id===r.stock.sector)?.color||'#3b82f6'};">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px;align-items:center;">
+        <span style="font-weight:500;">${r.stock.name}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:${r.cached?'var(--green)':'var(--amber)'};">${r.cached ? '💾 캐시 $0.0000' : '$' + r.cost.toFixed(4)}</span>
+      </div>
+      <div style="font-size:12px;line-height:1.7;color:var(--text2);">${r.text.replace(/\n/g,'<br>')}</div>
+    </div>`).join('');
+  }
+  const total = results.reduce((s,r) => s + r.cost, 0);
+  const cached = results.filter(r => r.cached).length;
+  showToast(`배치 완료 · 총 $${total.toFixed(4)} · ${cached}개 캐시 절감`, 'success');
+}
+
+function markdownToHtml(md) {
+  return md
+    .replace(/^### (.+)$/gm, '<h3 style="font-size:13px;margin:12px 0 4px;color:var(--text);">$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2 style="font-size:14px;font-weight:600;margin:14px 0 6px;color:var(--accent2);">$2</h2>')
+    .replace(/^# (.+)$/gm, '<h1 style="font-size:15px;font-weight:700;margin:16px 0 8px;">$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text);">$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^- (.+)$/gm, '<div style="padding-left:14px;margin:3px 0;">· $1</div>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+}
+
+function saveAiHistory(stock, type, model, tokens, cost) {
+  const history = JSON.parse(localStorage.getItem('per_ai_cost_history') || '[]');
+  history.push({ time: new Date().toLocaleTimeString('ko-KR'), stock, type, model, tokens, cost });
+  if (history.length > 200) history.splice(0, history.length - 200);
+  localStorage.setItem('per_ai_cost_history', JSON.stringify(history));
+}
+
+function clearAiHistory() {
+  localStorage.removeItem('per_ai_cost_history');
+  renderPage();
+  showToast('AI 분석 내역이 초기화되었습니다.', 'info');
+}
+
+document.getElementById('batchCount')?.addEventListener('change', function() {
+  const n = parseInt(this.value);
+  const el = document.getElementById('batchCostEst');
+  // Haiku 기준: 분석 1회 ~$0.0002
+  if (el) el.textContent = `~$${(n * 0.0002).toFixed(4)}`;
+});
+
+// ─── Boot ─────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
