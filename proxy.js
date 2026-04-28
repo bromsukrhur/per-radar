@@ -332,12 +332,37 @@ app.get('/api/krx/low-per', async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════
+// ── AI API 중계 (CORS 우회) ───────────────────────────────────
+// ════════════════════════════════════════════════════════════
+app.post('/api/ai/messages', async (req, res) => {
+  const apiKey   = req.headers['x-api-key'];
+  const endpoint = req.headers['x-ai-endpoint'] || 'https://api.aiprime.tech/v1';
+  if (!apiKey) return res.status(400).json({ error: 'x-api-key 헤더 필요' });
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const r     = await fetch(`${endpoint}/messages`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':      'application/json',
+        'x-api-key':         apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(req.body),
+    });
+    const data = await r.json();
+    res.status(r.status).json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── 헬스체크 ─────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({
     status:          'ok',
-    version:         '2.0',
-    features:        ['kis-price', 'naver-per', 'krx-sector-per', 'krx-low-per'],
+    version:         '2.1',
+    features:        ['kis-price', 'naver-per', 'krx-sector-per', 'krx-low-per', 'ai-proxy'],
     naverCacheCount: Object.keys(naverCache).length,
     krxCached:       !!krxCache.data,
   });
