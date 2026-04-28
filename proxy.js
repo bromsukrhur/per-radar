@@ -337,22 +337,34 @@ app.get('/api/krx/low-per', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 app.post('/api/ai/messages', async (req, res) => {
   const apiKey   = req.headers['x-api-key'];
-  const endpoint = req.headers['x-ai-endpoint'] || 'https://api.aiprime.tech/v1';
+  const endpoint = req.headers['x-ai-endpoint'] || 'https://aiprimetech.io/v1';
   if (!apiKey) return res.status(400).json({ error: 'x-api-key 헤더 필요' });
   try {
     const fetch = (await import('node-fetch')).default;
-    const r     = await fetch(`${endpoint}/messages`, {
+
+    // aiprimetech.io / anthropic 둘 다 호환되게 헤더 전송
+    const r = await fetch(`${endpoint}/messages`, {
       method:  'POST',
       headers: {
         'Content-Type':      'application/json',
         'x-api-key':         apiKey,
+        'Authorization':     `Bearer ${apiKey}`,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify(req.body),
     });
-    const data = await r.json();
-    res.status(r.status).json(data);
+
+    const text = await r.text();
+    console.log(`[AI] ${r.status} ${endpoint} →`, text.slice(0, 200));
+
+    try {
+      const data = JSON.parse(text);
+      res.status(r.status).json(data);
+    } catch(e) {
+      res.status(r.status).send(text);
+    }
   } catch (e) {
+    console.error('[AI 중계 오류]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

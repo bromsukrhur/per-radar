@@ -616,7 +616,7 @@
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">엔드포인트 URL</label>
-        <input class="form-input" id="inputAiEndpoint" value="https://api.aiprime.tech/v1" placeholder="https://api.aiprime.tech/v1">
+        <input class="form-input" id="inputAiEndpoint" value="https://aiprimetech.io/v1" placeholder="https://aiprimetech.io/v1">
       </div>
       <div class="form-group">
         <label class="form-label">모델</label>
@@ -1606,7 +1606,7 @@ function saveAiConfig() {
   const endpoint = document.getElementById('inputAiEndpoint').value.trim();
   const model    = document.getElementById('inputAiModel').value;
   if (!key) { showToast('API 키를 입력하세요.', 'warning'); return; }
-  const cfg = { apiKey: key, endpoint: endpoint || 'https://api.aiprime.tech/v1', model };
+  const cfg = { apiKey: key, endpoint: endpoint || 'https://aiprimetech.io/v1', model };
   localStorage.setItem('per_ai_config', JSON.stringify(cfg));
   state.aiConfig = cfg;
   document.getElementById('aiApiModal').classList.remove('open');
@@ -1678,7 +1678,7 @@ async function callAiApiRaw(prompt, maxTokens, model) {
   const cfg = state.aiConfig;
   if (!cfg?.apiKey) throw new Error('API 키가 설정되지 않았습니다.');
   // proxy 서버가 있으면 경유 (CORS 우회), 없으면 직접 호출
-  const aiEndpoint = cfg.endpoint || 'https://api.aiprime.tech/v1';
+  const aiEndpoint = cfg.endpoint || 'https://aiprimetech.io/v1';
   const useProxy   = proxyAvailable;
   const endpoint   = useProxy ? `${PROXY_BASE}/api/ai/messages` : `${aiEndpoint}/messages`;
   const system = '한국 주식 애널리스트. 마크다운(##,**,-)으로 간결하게 답변.';
