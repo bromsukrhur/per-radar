@@ -435,6 +435,13 @@
       </div>
     </div>
     <div class="nav-section">
+      <div class="nav-label">실데이터 발굴</div>
+      <div class="nav-item" onclick="setPage('krx_lowper')">
+        <span class="nav-icon">📉</span> KRX 저PER 전체순위
+        <span class="nav-badge" style="background:var(--teal)">KRX</span>
+      </div>
+    </div>
+    <div class="nav-section">
       <div class="nav-label">설정</div>
       <div class="nav-item" onclick="openApiModal()">
         <span class="nav-icon">🔑</span> KIS API 설정
@@ -692,8 +699,8 @@ let alertRules = JSON.parse(localStorage.getItem('per_alerts') || '[]');
 let watchlist  = JSON.parse(localStorage.getItem('per_watchlist') || '[]');
 let liveStocks = STOCKS.map(s => ({...s}));
 
-// ─── Init ─────────────────────────────────────────────────
-function init() {
+// ─── Init (아래 async init으로 대체됨) ───────────────────────
+function _initLegacy() {
   loadApiConfig();
   loadAiConfig();
   renderPage();
@@ -701,6 +708,7 @@ function init() {
   setInterval(tickData, 3000);
   updateLastUpdate();
   document.getElementById('alertCount').textContent = alertRules.length;
+  // 기존 init은 더 이상 호출되지 않음
 }
 
 // ─── Pages ───────────────────────────────────────────────
@@ -708,7 +716,7 @@ function setPage(p) {
   state.page = p;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   event.currentTarget?.classList.add('active');
-  const titles = {overview:'시장 개요', screener:'종목 스크리너', sectors:'업종 분석', alerts:'알림 설정', watchlist:'관심 종목', ai_analysis:'🤖 AI 종목 분석', ai_cost:'💰 AI 비용 추적'};
+  const titles = {overview:'시장 개요', screener:'종목 스크리너', sectors:'업종 분석', alerts:'알림 설정', watchlist:'관심 종목', ai_analysis:'🤖 AI 종목 분석', ai_cost:'💰 AI 비용 추적', krx_lowper:'📉 KRX 저PER 전체 순위'};
   document.getElementById('pageTitle').textContent = titles[p] || p;
   renderPage();
 }
@@ -722,6 +730,7 @@ function renderPage() {
   if (state.page === 'watchlist')    c.innerHTML = buildWatchlistPage();
   if (state.page === 'ai_analysis')  c.innerHTML = buildAiPage();
   if (state.page === 'ai_cost')      c.innerHTML = buildAiCostPage();
+  if (state.page === 'krx_lowper')   { c.innerHTML = buildKrxPage(); renderKrxLowPer(); }
   afterRender();
 }
 
@@ -1022,46 +1031,196 @@ function tickData() {
   updateLastUpdate();
 }
 
+// ── 프록시 서버 감지 ─────────────────────────────────────────
+let PROXY_BASE = 'http://localhost:3001';
+let proxyAvailable = false;
+
+async function detectProxy() {
+  try {
+    const r = await fetch(`${PROXY_BASE}/api/health`, { signal: AbortSignal.timeout(2000) });
+    const d = await r.json();
+    proxyAvailable = d.status === 'ok';
+    if (proxyAvailable) {
+      const ver = d.version || '1.0';
+      const hasNaver = d.features?.includes('naver-per');
+      const hasKrx   = d.features?.includes('krx-sector-per');
+      showToast(`프록시 서버 v${ver} 연결됨 ${hasNaver?'· 네이버PER ✓':''} ${hasKrx?'· KRX ✓':''}`, 'success');
+    }
+  } catch(e) {
+    proxyAvailable = false;
+  }
+  return proxyAvailable;
+}
+
+// ── 네이버 금융 배치 PER 가져오기 ────────────────────────────
+async function fetchNaverPer(codes) {
+  if (!proxyAvailable) return {};
+  try {
+    const r = await fetch(`${PROXY_BASE}/api/naver/batch`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ codes }),
+    });
+    const d = await r.json();
+    const map = {};
+    (d.results || []).forEach(item => {
+      if (!item.error) map[item.code] = item;
+    });
+    return map;
+  } catch(e) {
+    return {};
+  }
+}
+
+// ── KRX 업종 PER 가져오기 ────────────────────────────────────
+async function fetchKrxSectorPer() {
+  if (!proxyAvailable) return {};
+  try {
+    const r = await fetch(`${PROXY_BASE}/api/krx/sector-per`);
+    const d = await r.json();
+    return d.data || {};
+  } catch(e) {
+    return {};
+  }
+}
+
+// ── KRX 저PER 종목 전체 순위 ─────────────────────────────────
+async function fetchKrxLowPer() {
+  if (!proxyAvailable) return [];
+  try {
+    const r = await fetch(`${PROXY_BASE}/api/krx/low-per`);
+    const d = await r.json();
+    return d.results || [];
+  } catch(e) {
+    return [];
+  }
+}
+
+// ── 메인 데이터 갱신 함수 ────────────────────────────────────
 async function fetchKisData() {
   const cfg = state.apiConfig;
-  if (!cfg?.appKey) return;
-  try {
-    const base = cfg.env === 'paper' ? 'https://openapivts.koreainvestment.com:29443' : 'https://openapi.koreainvestment.com:9443';
-    // Token
-    const tokenRes = await fetch(base + '/oauth2/tokenP', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ grant_type:'client_credentials', appkey: cfg.appKey, appsecret: cfg.appSecret })
-    });
-    const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) { showToast('토큰 발급 실패. API 키를 확인하세요.', 'warning'); return; }
-    cfg.token = tokenData.access_token;
 
-    // 종목별 현재가 조회
-    for (const s of liveStocks) {
-      try {
-        const r = await fetch(`${base}/uapi/domestic-stock/v1/quotations/inquire-price?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=${s.code}`, {
-          headers: {
-            'authorization': `Bearer ${cfg.token}`,
-            'appkey': cfg.appKey,
-            'appsecret': cfg.appSecret,
-            'tr_id': 'FHKST01010100',
-          }
-        });
-        const d = await r.json();
-        if (d.output?.stck_prpr) {
-          s.price = parseInt(d.output.stck_prpr);
-          s.chg = parseFloat(d.output.prdy_ctrt);
-        }
-      } catch(e) {}
-      await new Promise(r=>setTimeout(r,100)); // rate limit
+  // 프록시 서버 먼저 확인
+  await detectProxy();
+
+  // 1. 네이버 금융에서 실시간 PER/PBR/주가 가져오기
+  if (proxyAvailable) {
+    showToast('네이버 금융에서 실시간 PER 데이터 가져오는 중...', 'info');
+    const codes   = liveStocks.map(s => s.code);
+    const naverData = await fetchNaverPer(codes);
+    let updated = 0;
+
+    liveStocks.forEach(s => {
+      const n = naverData[s.code];
+      if (!n) return;
+      if (n.per   !== null) s.per   = n.per;
+      if (n.pbr   !== null) s.pbr   = n.pbr;
+      if (n.price !== null) s.price = n.price;
+      if (n.chg   !== undefined) s.chg = n.chg;
+      s.dataSource = 'naver';
+      updated++;
+    });
+
+    if (updated > 0) {
+      showToast(`네이버 금융 실시간 데이터 ${updated}종목 업데이트 완료`, 'success');
+      setLiveStatus(true);
     }
-    setLiveStatus(true);
-    showToast('실시간 데이터 연결 성공!', 'success');
-  } catch(e) {
-    showToast('API 연결 실패: ' + e.message, 'warning');
-    setLiveStatus(false);
+
+    // 2. KRX 업종 PER 업데이트
+    const krxSector = await fetchKrxSectorPer();
+    if (Object.keys(krxSector).length > 0) {
+      SECTORS.forEach(s => {
+        const k = krxSector[s.id];
+        if (k?.per) {
+          s.marketPer = k.per;
+          s.dataSource = 'krx';
+        }
+      });
+      showToast('KRX 업종 PER 업데이트 완료', 'info');
+    }
+
+    renderPage();
+    buildTicker();
   }
+
+  // 3. KIS API로 실시간 주가 보완 (프록시 + KIS 키 둘 다 있을 때)
+  if (!cfg?.appKey) return;
+
+  try {
+    const codes  = liveStocks.map(s => s.code);
+    const r      = await fetch(`${PROXY_BASE}/api/batch-price`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ codes, appKey: cfg.appKey, appSecret: cfg.appSecret, env: cfg.env }),
+    });
+    const d = await r.json();
+    (d.results || []).forEach(item => {
+      if (item.error || !item.data) return;
+      const s = liveStocks.find(x => x.code === item.code);
+      if (!s) return;
+      if (item.data.stck_prpr) s.price = parseInt(item.data.stck_prpr);
+      if (item.data.prdy_ctrt) s.chg   = parseFloat(item.data.prdy_ctrt);
+      // KIS에서 PER 제공 시 덮어쓰기
+      if (item.data.per && parseFloat(item.data.per) > 0) s.per = parseFloat(item.data.per);
+      s.dataSource = 'kis';
+    });
+    setLiveStatus(true);
+    showToast('KIS 실시간 주가 업데이트 완료', 'success');
+    renderPage();
+    buildTicker();
+  } catch(e) {
+    // KIS 실패해도 네이버 데이터로 계속 동작
+    if (!proxyAvailable) {
+      showToast('프록시 서버가 실행 중이지 않습니다. node proxy.js를 실행하세요.', 'warning');
+      setLiveStatus(false);
+    }
+  }
+}
+
+// ── KRX 저PER 종목 탭 렌더링 ────────────────────────────────
+async function renderKrxLowPer() {
+  const container = document.getElementById('krxLowPerContainer');
+  if (!container) return;
+  container.innerHTML = '<div style="color:var(--text3);padding:20px;text-align:center;">KRX 데이터 로딩 중...</div>';
+
+  await detectProxy();
+  if (!proxyAvailable) {
+    container.innerHTML = '<div style="color:var(--amber);padding:20px;text-align:center;">⚠️ 프록시 서버 필요 — node proxy.js 실행 후 새로고침</div>';
+    return;
+  }
+
+  const rows = await fetchKrxLowPer();
+  if (!rows.length) {
+    container.innerHTML = '<div style="color:var(--text3);padding:20px;text-align:center;">데이터를 가져올 수 없습니다.</div>';
+    return;
+  }
+
+  container.innerHTML = `
+  <div style="overflow-x:auto;">
+    <table class="stock-table">
+      <thead><tr>
+        <th>순위</th><th>종목명</th><th>종목코드</th><th>PER</th><th>PBR</th><th>주가</th><th>관심</th>
+      </tr></thead>
+      <tbody>
+      ${rows.map((s, i) => {
+        const perClass  = s.per < 5 ? 'per-low' : s.per < 10 ? 'per-mid' : 'per-high';
+        const isWatched = watchlist.includes(s.code);
+        return `<tr>
+          <td style="font-family:var(--mono);color:var(--text3);">${i+1}</td>
+          <td><div class="stock-name">${s.name}</div></td>
+          <td style="font-family:var(--mono);font-size:11px;color:var(--text3);">${s.code}</td>
+          <td><span class="per-badge ${perClass}">${s.per}x</span></td>
+          <td style="font-family:var(--mono);font-size:12px;">${s.pbr || '-'}</td>
+          <td style="font-family:var(--mono);font-size:12px;">${s.price ? s.price.toLocaleString()+'원' : '-'}</td>
+          <td><button class="alert-btn ${isWatched?'on':''}" onclick="toggleWatch('${s.code}','${s.name}')">${isWatched?'⭐':'☆'}</button></td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+  </div>
+  <div style="font-size:11px;color:var(--text3);padding:10px 18px;">
+    📊 KRX 공식 데이터 기준 · KOSPI 전체 종목 PER 0~15배 필터 · ${rows.length}개 종목
+  </div>`;
 }
 
 // ─── Alert Logic ─────────────────────────────────────────
@@ -1304,6 +1463,49 @@ function buildAiPage() {
     </div>
   </div>
 
+  <!-- AI 종목 추천 -->
+  <div class="panel" style="margin-top:14px;">
+    <div class="panel-header">
+      <span class="panel-title">🎯 AI 종목 추천</span>
+      <span class="panel-sub" style="color:var(--purple);">실데이터 기반 · Haiku ~$0.003</span>
+    </div>
+    <div class="panel-body">
+      <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px;">
+        <div style="flex:1;min-width:200px;">
+          <div class="form-label" style="margin-bottom:6px;">투자 성향</div>
+          <select class="form-input" id="recStyle" style="width:100%;">
+            <option value="growth">성장주 위주 (EPS성장 + 저PER)</option>
+            <option value="value">가치주 위주 (저PER + 저PBR)</option>
+            <option value="balanced">균형형 (PER·ROE·성장 종합)</option>
+            <option value="defensive">방어형 (금융·배당 중심)</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:160px;">
+          <div class="form-label" style="margin-bottom:6px;">추천 종목 수</div>
+          <select class="form-input" id="recCount" style="width:100%;">
+            <option value="3">3종목 (~$0.002)</option>
+            <option value="5" selected>5종목 (~$0.003)</option>
+            <option value="10">10종목 (~$0.005)</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:160px;">
+          <div class="form-label" style="margin-bottom:6px;">업종 필터</div>
+          <select class="form-input" id="recSector" style="width:100%;">
+            <option value="all">전체 업종</option>
+            ${SECTORS.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+        💡 현재 스크리너의 실제 PER·PBR·ROE·EPS성장 데이터를 AI에게 전달해 추천받습니다. 네이버 금융 실데이터 연동 시 더 정확한 추천이 가능합니다.
+      </div>
+      <button class="btn-primary" style="width:auto;padding:8px 24px;" onclick="runStockRecommend()" id="recBtn">
+        ${hasKey ? '🎯 AI 종목 추천 받기' : '🔑 API 키 필요'}
+      </button>
+      <div id="recResults" style="margin-top:16px;"></div>
+    </div>
+  </div>
+
   <!-- Batch Analysis -->
   <div class="panel" style="margin-top:14px;">
     <div class="panel-header">
@@ -1342,6 +1544,29 @@ function buildAiCostPage() {
       <div class="mc-value" style="color:${c};font-size:18px;">${v}</div>
       <div style="font-size:11px;color:var(--text3);margin-top:2px;">${s}</div>
     </div>`).join('')}
+  </div>
+
+  <!-- 기능별 예상 비용 가이드 -->
+  <div class="panel" style="margin-top:14px;">
+    <div class="panel-header"><span class="panel-title">💰 기능별 예상 비용 (Haiku 기준)</span></div>
+    <div class="panel-body" style="padding:0;">
+      ${[
+        ['🎯 AI 종목 추천 (5종목)', '~$0.003', '가장 유용, 추천'],
+        ['🎯 AI 종목 추천 (10종목)', '~$0.005', ''],
+        ['⚡ 배치 분석 (5종목)', '~$0.002', '종목별 1줄 요약'],
+        ['⚡ 배치 분석 (10종목)', '~$0.003', ''],
+        ['🤖 종합 투자 분석 (1종목)', '~$0.001', ''],
+        ['📝 3줄 요약 (1종목)', '~$0.0003', '가장 저렴'],
+        ['💵 $1로 가능한 분석 횟수', '약 300~1000회', ''],
+      ].map(([label, cost, note]) => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 18px;border-bottom:1px solid var(--border);">
+        <span style="font-size:13px;">${label}</span>
+        <div style="text-align:right;">
+          <span style="font-family:var(--mono);font-size:13px;color:var(--amber);">${cost}</span>
+          ${note ? `<span style="font-size:11px;color:var(--green);margin-left:8px;">${note}</span>` : ''}
+        </div>
+      </div>`).join('')}
+    </div>
   </div>
 
   <div class="panel" style="margin-top:14px;">
@@ -1551,6 +1776,94 @@ async function runAiAnalysis() {
   if (btn) btn.disabled = false;
 }
 
+// ── AI 종목 추천 ──────────────────────────────────────────────
+async function runStockRecommend() {
+  if (!state.aiConfig?.apiKey) { openAiApiModal(); return; }
+
+  const style    = document.getElementById('recStyle')?.value  || 'balanced';
+  const count    = parseInt(document.getElementById('recCount')?.value || '5');
+  const sector   = document.getElementById('recSector')?.value || 'all';
+  const btn      = document.getElementById('recBtn');
+  const results  = document.getElementById('recResults');
+
+  const styleLabel = {
+    growth:    '성장주 위주 (EPS성장 + 저PER)',
+    value:     '가치주 위주 (저PER + 저PBR)',
+    balanced:  '균형형 (PER·ROE·성장 종합)',
+    defensive: '방어형 (금융·배당 중심)',
+  }[style];
+
+  // 후보 종목 필터링
+  let candidates = [...liveStocks];
+  if (sector !== 'all') candidates = candidates.filter(s => s.sector === sector);
+
+  // 성향별 정렬
+  if (style === 'growth')    candidates.sort((a,b) => (b.eps_growth/b.per) - (a.eps_growth/a.per));
+  if (style === 'value')     candidates.sort((a,b) => (a.per + a.pbr) - (b.per + b.pbr));
+  if (style === 'balanced')  candidates.sort((a,b) => (b.roe/b.per*b.eps_growth) - (a.roe/a.per*a.eps_growth));
+  if (style === 'defensive') candidates.sort((a,b) => a.per - b.per);
+
+  // 상위 20개만 AI에 전달 (토큰 절약)
+  const pool = candidates.slice(0, 20);
+
+  // 데이터 소스 표시
+  const isLiveData = pool.some(s => s.dataSource === 'naver' || s.dataSource === 'kis');
+  const dataLabel  = isLiveData ? '네이버 금융 실데이터' : '데모 데이터';
+
+  if (btn) btn.disabled = true;
+  if (results) results.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;padding:20px 0;color:var(--text2);">
+      <span style="animation:spin 1s linear infinite;display:inline-block;font-size:18px;">↻</span>
+      AI가 ${pool.length}개 후보 종목을 분석 중... (${dataLabel})
+    </div>`;
+
+  // 종목 데이터를 압축 텍스트로 변환
+  const stockList = pool.map((s,i) => {
+    const sec = SECTORS.find(x => x.id === s.sector);
+    return `${i+1}.${s.name}(${s.code})|업종:${sec?.name}|PER:${s.per}|PBR:${s.pbr}|ROE:${s.roe}%|EPS성장:+${s.eps_growth}%|점수:${s.score}/5`;
+  }).join('\n');
+
+  const prompt = `한국 주식 투자자를 위한 종목 추천 분석.
+
+투자 성향: ${styleLabel}
+후보 종목 (${pool.length}개):
+${stockList}
+
+위 데이터 기반으로 "${styleLabel}" 성향에 맞는 상위 ${count}개 종목을 추천해줘.
+
+각 종목별로:
+1. 추천 이유 (PER·PBR·ROE·EPS성장 수치 근거 포함, 2줄)
+2. 투자 포인트 1줄
+3. 주의 리스크 1줄
+4. 매수 판단: 강력매수/매수/관망 중 하나
+
+마지막에 전체 시장 한줄 코멘트 추가.
+마크다운(##,**,-)으로 간결하게.`;
+
+  try {
+    const result = await callAiApi(prompt, null, 'full', null);
+
+    const costStr = `$${result.cost.toFixed(4)} · ${result.tokens.toLocaleString()} 토큰`;
+    saveAiHistory('종목추천(' + styleLabel.split(' ')[0] + ')', 'recommend', state.aiConfig.model, result.tokens, result.cost);
+
+    if (results) results.innerHTML = `
+      <div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:10px;padding:14px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div>
+          <span style="font-size:13px;font-weight:500;color:#a78bfa;">🎯 AI 추천 완료</span>
+          <span style="font-size:12px;color:var(--text2);margin-left:10px;">${styleLabel} · ${count}종목</span>
+        </div>
+        <div style="font-size:11px;font-family:var(--mono);color:var(--amber);">비용: ${costStr} · ${dataLabel}</div>
+      </div>
+      <div style="line-height:1.9;font-size:13px;" id="recMarkdown"></div>`;
+    document.getElementById('recMarkdown').innerHTML = markdownToHtml(result.text);
+    showToast(`종목 추천 완료 · ${costStr}`, 'success');
+  } catch(e) {
+    if (results) results.innerHTML = `<div style="color:#f87171;padding:16px;">오류: ${e.message}</div>`;
+    showToast('AI 추천 실패: ' + e.message, 'warning');
+  }
+  if (btn) btn.disabled = false;
+}
+
 async function runBatchAnalysis() {
   if (!state.aiConfig?.apiKey) { openAiApiModal(); return; }
   const n   = parseInt(document.getElementById('batchCount')?.value || '5');
@@ -1621,7 +1934,43 @@ document.getElementById('batchCount')?.addEventListener('change', function() {
   if (el) el.textContent = `~$${(n * 0.0002).toFixed(4)}`;
 });
 
+// ─── KRX 저PER 페이지 ────────────────────────────────────────
+function buildKrxPage() {
+  return `
+  <div class="panel" style="margin-bottom:14px;">
+    <div class="panel-header">
+      <span class="panel-title">📉 KRX 공식 저PER 종목 순위</span>
+      <span class="panel-sub" style="color:var(--teal);">KOSPI 전체 · PER 15배 이하</span>
+    </div>
+    <div class="panel-body" style="padding:0;">
+      <div style="background:rgba(20,184,166,0.08);border-bottom:1px solid var(--border);padding:10px 18px;font-size:12px;color:var(--text2);line-height:1.7;">
+        📌 <strong style="color:var(--teal);">KRX 정보데이터시스템</strong> 공식 데이터 기준
+        · 매일 장 마감 후 업데이트
+        · PER 0~15배 필터 · 시가총액 순 정렬
+        · 관심 종목 추가 후 스크리너에서 AI 분석 가능
+      </div>
+      <div id="krxLowPerContainer" style="padding:20px;text-align:center;color:var(--text3);">
+        데이터 로딩 중...
+      </div>
+    </div>
+  </div>`;
+}
+
 // ─── Boot ─────────────────────────────────────────────────
+async function init() {
+  loadApiConfig();
+  loadAiConfig();
+  renderPage();
+  buildTicker();
+  setInterval(tickData, 3000);
+  updateLastUpdate();
+  document.getElementById('alertCount').textContent = alertRules.length;
+  // 프록시 서버 자동 감지 및 실데이터 로드
+  const hasProxy = await detectProxy();
+  if (hasProxy) {
+    fetchKisData();
+  }
+}
 init();
 </script>
 </body>
