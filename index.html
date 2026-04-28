@@ -1019,15 +1019,8 @@ function buildTicker() {
 
 // ─── Live Data Simulation / KIS API ──────────────────────
 function tickData() {
-  liveStocks.forEach(s => {
-    const delta = (Math.random() - 0.495) * 0.3;
-    s.price = Math.round(s.price * (1 + delta / 100));
-    s.chg = Math.round((s.chg + delta) * 10) / 10;
-    s.per = Math.round(s.per * (1 + delta/200) * 10) / 10;
-    checkAlerts(s);
-  });
-  if (state.page === 'overview' || state.page === 'screener') renderPage();
-  buildTicker();
+  // 시뮬레이션 비활성화 — 네이버 금융 실데이터만 사용
+  liveStocks.forEach(s => checkAlerts(s));
   updateLastUpdate();
 }
 
@@ -1432,7 +1425,8 @@ function buildAiPage() {
             <option value="sector">업종 경쟁력 분석</option>
             <option value="summary">3줄 요약</option>
           </select>
-          <button class="btn-primary" style="width:auto;padding:8px 20px;" onclick="runAiAnalysis()" id="aiRunBtn">
+          <button onclick="clearAiCache()" style="padding:8px 14px;border-radius:8px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);font-size:12px;cursor:pointer;" title="캐시 초기화">🗑️ 캐시</button>
+        <button class="btn-primary" style="width:auto;padding:8px 20px;" onclick="runAiAnalysis()" id="aiRunBtn">
             ${hasKey ? '✨ AI 분석 실행' : '🔑 API 키 필요'}
           </button>
         </div>
@@ -1658,7 +1652,7 @@ const MAX_TOKENS_MAP = {
 
 // ── 결과 캐시 (30분 유효) ─────────────────────────────────
 const AI_CACHE = {};
-const CACHE_TTL = 30 * 60 * 1000; // 30분
+const CACHE_TTL = 5 * 60 * 1000; // 5분
 
 function getCacheKey(code, type, customPrompt) {
   return `${code}__${type}__${customPrompt || ''}`;
@@ -1727,6 +1721,11 @@ async function callAiApi(prompt, maxTokens, type, cacheKey) {
 function buildStockContext(stock, sec) {
   // 긴 설명 없이 숫자만 — 토큰 약 40% 절감
   return `${stock.name}|${sec?.name}|PER${stock.per}|PBR${stock.pbr}|ROE${stock.roe}%|EPS+${stock.eps_growth}%|업종평균PER${sec?.marketPer}`;
+}
+
+function clearAiCache() {
+  Object.keys(AI_CACHE).forEach(k => delete AI_CACHE[k]);
+  showToast('AI 캐시 초기화 완료', 'info');
 }
 
 function setAiPrompt(text) {
